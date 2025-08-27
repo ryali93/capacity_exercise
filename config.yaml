@@ -1,0 +1,110 @@
+seed: 42
+root_dir: ../dataset
+
+# ===== Sensors & channels =====
+sensors:
+  sentinel2:
+    enabled: true
+    bands: [B02, B03, B04, B08, B11, B12]
+    indices: [NDVI, NDWI] #NDVI, NDWI
+    provider_norm: true   # product-specific stats (AWS, BDC_L2A, BDC_16D)
+    scl_cloud_mask:
+      use: true
+      classes_mask_aws: [11, 12, 30, 31, 34, 35, 38, 43]
+      classes_mask_bdc_l2a: [11, 12, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 42, 43, 47]
+      classes_mask_bdc_l6d: [3, 8, 9, 10, 11, 12, 33, 38]
+      dilate_px: 1
+  sentinel1:
+    enabled: true
+    to_db: true           # log-scale before stats
+    bands: [vv, vh]
+    indices: [] # RVI, RFDI
+    add_ratio: false  # VH/VV
+    add_rfdi: true
+    add_rvi: true
+  # landsat:
+  #   enabled: false
+  #   bands: [B2, B3, B4, B5, B6, B7]
+  #   indices: [NDVI, NDWI, NBR]
+  #   qa_mask:
+  #     use: true
+  #     bits_mask: [3,5,7]  # shadow, cloud, cirrus (Collection 2 QA_PIXEL)
+  #     dilate_px: 1
+  # cbers4a:
+  #   enabled: false
+  #   mux_bands: [BAND5, BAND6, BAND7, BAND8]    # 16 m
+  #   wpm_rgb: true                               # 2 m RGB downsampled
+  #   indices: [NDVI]
+
+# ===== Temporal policy =====
+temporal:
+  mode: single  # single | pair | delta
+  pre_days: 30
+  post_days: 14
+  selector: closest_post   # closest_post | best_clear | fixed_offsets
+  pairing: expand_pairs     # closest_pair | expand_pairs
+  max_pair_delta_days: 8
+  expand_pairs: true
+
+# ===== Harmonization =====
+harmonize:
+  reference: sentinel2    # sentinel2 | landsat | custom
+
+# ===== Sampling =====
+sampling:
+  crop_size: 448
+  # min_valid_fraction: 0.6    # after QA/cloud masking
+  center_crops: true
+
+# ===== Normalization & stats =====
+stats:
+  compute_if_missing: true
+  sample_per_type: 50
+  p_low: 1
+  p_high: 99
+  cache_path: stats/ms_stats.json
+
+# ===== Output tensor packing =====
+# pack:
+#   fusion: early             # early | late | dual
+#   channel_order: null
+
+# ===== Training =====
+training:
+  experiment: s2idxs1idx    # s2 | s2s1 | s2s1idx  (or other)
+  # channels: []            # optional: explicit list of channels to use, overrides "experiment"
+  min_clean: 0.6            # filter by clean_percent (0-1)
+  # Model
+  batch_size: 6
+  epochs: 40
+  val_frac: 0.3
+  encoder: resnet34
+  encoder_weights: imagenet
+  lr: 1.0e-3
+  # Metric
+  threshold: 0.2            # threshold for metrics (F1, IoU deforestation)
+  # Callbacks
+  early_stopping_patience: 10
+  reduce_on_plateau:
+    factor: 0.5
+    patience: 3
+  # Mask
+  mask_positive_value: 255     # if GT uses 255 as "deforestation"
+  mask_ignore_values: []       # values to ignore (e.g. nodata)
+
+# ===== Logging =====
+logging:
+  out_dir: runs
+  # save_every: 1             # epochs
+  # save_best: true
+  # csv_name: metrics.csv
+  # jsonl_name: events.jsonl
+
+# ===== W&B =====
+wandb:
+  enabled: true
+  project: capacity-defor
+  name: s2idxs1idx_wce_v2
+  entity: null
+  mode: online              # online | offline | disabled
+  tags: ["baseline", "s2idxs1idx", "bs6", "vf0.3", "th0.2", "40e"]
